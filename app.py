@@ -35,7 +35,7 @@ with col_desc1:
     * **RAP:** Sin_RAP = mezcla sin asfalto recuperado; Con_RAP = mezcla con asfalto recuperado.
     * **Velocidad:** fijada a 50 mm/min (los resultados a velocidad de 2 mm/min han sido excluidos).
     * **Mezcla:** AC16, AC22, AUTL 11s, AUTL11c, BBTM11B, BBTMc, BBTMs, SMA16c, SMA16m.
-    *(Nota: Mezclas tipo AC sin RAP excluidas)*
+    *(Nota: Mezclas tipo AC sin RAP excluidas, salvo las AC16)*
     """)
 with col_desc2:
     st.info("""
@@ -85,7 +85,8 @@ def cargar_datos():
             
         # --- FILTROS GLOBALES SOLICITADOS ---
         if 'Mezcla' in df.columns and 'RAP' in df.columns:
-            mask_ac_sin_rap = (df['Mezcla'].str.startswith('AC', na=False)) & (df['RAP'].astype(str).str.lower().isin(['sin_rap', '0']))
+            # Excluimos mezclas AC sin RAP, pero desbloqueamos las que contengan 'AC16'
+            mask_ac_sin_rap = (df['Mezcla'].str.startswith('AC', na=False)) & (~df['Mezcla'].str.contains('AC16', na=False)) & (df['RAP'].astype(str).str.lower().isin(['sin_rap', '0']))
             df = df[~mask_ac_sin_rap]
             
         if 'Envejecimiento' in df.columns:
@@ -244,9 +245,8 @@ st.markdown("---")
 # ---------------------------------------------------------
 # 2. PESTAÑAS DE NAVEGACIÓN
 # ---------------------------------------------------------
-tab_parametrico, tab_stiff, tab_fisuracion = st.tabs([
+tab_parametrico, tab_fisuracion = st.tabs([
     "Análisis Paramétrico", 
-    "Diagrama Stiff",
     "Índice de fisuración"
 ])
 
@@ -579,146 +579,9 @@ with tab_parametrico:
     else:
         st.warning("Faltan variables necesarias para realizar el PCA.")
 
-
-# --- PESTAÑA 2: DIAGRAMA STIFF ---
-with tab_stiff:
-    st.header("2. Firma Mecánica: Diagrama de Stiff Diferencial")
-    
-    cols_stiff = ['Carga_pico', 'l75', 'm75', 'Gf_postpico', 'Rigidez_20', 'Ratio_Flexibilidad']
-    missing_cols = [c for c in cols_stiff if c not in df.columns]
-    
-    if not missing_cols:
-        df_50_stiff = df[df['Velocidad'] == 50].copy() if 'Velocidad' in df.columns else df.copy()
-        
-        col_setupA, col_setupB = st.columns(2)
-        mezclas_stiff = df_50_stiff['Mezcla'].dropna().unique().tolist()
-        rap_stiff = df_50_stiff['RAP'].dropna().unique().tolist()
-        env_stiff = df_50_stiff['Envejecimiento'].dropna().unique().tolist()
-
-        with col_setupA:
-            st.markdown("🟦 **Estado de Referencia**")
-            cA1, cA2, cA3 = st.columns(3)
-            m_A = cA1.selectbox("Mezcla", mezclas_stiff, key="m_A")
-            r_A = cA2.selectbox("RAP", rap_stiff, key="r_A")
-            e_A = cA3.selectbox("Env", env_stiff, key="e_A")
-
-        with col_setupB:
-            st.markdown("🟧 **Estado Modificado**")
-            cB1, cB2, cB3 = st.columns(3)
-            m_B = cB1.selectbox("Mezcla", mezclas_stiff, key="m_B")
-            r_B = cB2.selectbox("RAP", rap_stiff, key="r_B")
-            e_B = cB3.selectbox("Env", env_stiff, key="e_B")
-            
-        df_A = df_50_stiff[(df_50_stiff['Mezcla'] == m_A) & (df_50_stiff['RAP'] == r_A) & (df_50_stiff['Envejecimiento'] == e_A)]
-        df_B = df_50_stiff[(df_50_stiff['Mezcla'] == m_B) & (df_50_stiff['RAP'] == r_B) & (df_50_stiff['Envejecimiento'] == e_B)]
-            
-        if not df_A.empty and not df_B.empty:
-            def norm_stiff(val, col):
-                v_min = df_50_stiff[col].min()
-                v_max = df_50_stiff[col].max()
-                if v_max == v_min: return 0.5
-                return (val - v_min) / (v_max - v_min)
-
-            def get_stiff_data(df_subset):
-                vals = {
-                    'c': df_subset['Carga_pico'].mean(),
-                    'l': df_subset['l75'].mean(),
-                    'm': df_subset['abs_m75'].mean(),
-                    'gpo': df_subset['Gf_postpico'].mean(),
-                    'r': df_subset['Rigidez_20'].mean(),
-                    'rf': df_subset['Ratio_Flexibilidad'].mean()
-                }
-                
-                x_norm = [
-                    -norm_stiff(vals['c'], 'Carga_pico'), 
-                    -norm_stiff(vals['m'], 'abs_m75'), 
-                    -norm_stiff(vals['r'], 'Rigidez_20'), 
-                    norm_stiff(vals['rf'], 'Ratio_Flexibilidad'), 
-                    norm_stiff(vals['gpo'], 'Gf_postpico'), 
-                    norm_stiff(vals['l'], 'l75')
-                ]
-                text_vals = [
-                    f"{vals['c']:.1f}", f"{vals['m']:.2f}", f"{vals['r']:.1f}", 
-                    f"{vals['rf']:.3f}", f"{vals['gpo']:.0f}", f"{vals['l']:.2f}"
-                ]
-                y_coords = [3, 2, 1, 1, 2, 3]
-                x_centroid = sum(x_norm) / 6
-                
-                x_norm.append(x_norm[0])
-                y_coords.append(y_coords[0])
-                text_vals.append(text_vals[0])
-                return x_norm, y_coords, text_vals, x_centroid
-
-            xA, yA, txtA, cxA = get_stiff_data(df_A)
-            xB, yB, txtB, cxB = get_stiff_data(df_B)
-            
-            fig_stiff = go.Figure()
-            
-            fig_stiff.add_trace(go.Scatter(
-                x=xA, y=yA, fill='toself', fillcolor='rgba(52, 152, 219, 0.4)',
-                line=dict(color='#2980b9', width=2), mode='lines+markers+text',
-                text=txtA, textposition=["middle right", "middle right", "middle right", "middle left", "middle left", "middle left", "middle right"],
-                marker=dict(size=8, color='#2980b9'), textfont=dict(color='#2980b9', size=11), name=f"Ref: {m_A}|{r_A}|{e_A}"
-            ))
-            
-            fig_stiff.add_trace(go.Scatter(
-                x=xB, y=yB, fill='toself', fillcolor='rgba(230, 126, 34, 0.4)',
-                line=dict(color='#d35400', width=2), mode='lines+markers+text',
-                text=txtB, textposition=["middle left", "middle left", "middle left", "middle right", "middle right", "middle right", "middle left"],
-                marker=dict(size=8, color='#d35400'), textfont=dict(color='#d35400', size=11), name=f"Mod: {m_B}|{r_B}|{e_B}"
-            ))
-            
-            fig_stiff.add_trace(go.Scatter(
-                x=[cxA, cxB], y=[2, 2], mode='markers',
-                marker=dict(size=12, color=['#2980b9', '#d35400'], symbol='diamond'),
-                name="Centroides"
-            ))
-            
-            fig_stiff.add_shape(type="line", x0=0, y0=0.5, x1=0, y1=3.5, line=dict(color="black", width=2, dash="dash"))
-            fig_stiff.add_shape(type="line", x0=-1.1, y0=3, x1=1.1, y1=3, line=dict(color="gray", width=1, dash="dot"))
-            fig_stiff.add_shape(type="line", x0=-1.1, y0=2, x1=1.1, y1=2, line=dict(color="gray", width=1, dash="dot"))
-            fig_stiff.add_shape(type="line", x0=-1.1, y0=1, x1=1.1, y1=1, line=dict(color="gray", width=1, dash="dot"))
-            
-            delta_x = cxB - cxA
-            tendencia = "Rigidización" if delta_x < 0 else "Ductilización"
-            
-            fig_stiff.add_annotation(
-                x=cxB, y=2, ax=cxA, ay=2, xref="x", yref="y", axref="x", ayref="y",
-                showarrow=True, arrowhead=3, arrowsize=1.5, arrowwidth=2, arrowcolor="black"
-            )
-            fig_stiff.add_annotation(
-                x=(cxA + cxB)/2, y=2.15, xref="x", yref="y",
-                text=f"<b>Migración: {delta_x:.3f} ({tendencia})</b>",
-                showarrow=False, font=dict(size=13, color="black"), bgcolor="rgba(255,255,255,0.8)"
-            )
-
-            anotaciones_eje = [
-                dict(x=-1.2, y=3, text="Carga Pico", xanchor='right', showarrow=False, font=dict(size=12, color="black")),
-                dict(x=1.2, y=3, text="l75 (Desplazam.)", xanchor='left', showarrow=False, font=dict(size=12, color="black")),
-                dict(x=-1.2, y=2, text="|m75| (Fragilidad)", xanchor='right', showarrow=False, font=dict(size=12, color="black")),
-                dict(x=1.2, y=2, text="Gf Post-pico", xanchor='left', showarrow=False, font=dict(size=12, color="black")),
-                dict(x=-1.2, y=1, text="Rigidez_20", xanchor='right', showarrow=False, font=dict(size=12, color="black")),
-                dict(x=1.2, y=1, text="Ratio Flexibilidad", xanchor='left', showarrow=False, font=dict(size=12, color="black"))
-            ]
-            
-            fig_stiff.update_layout(
-                xaxis=dict(
-                    range=[-1.5, 1.5], 
-                    showticklabels=True, 
-                    tickvals=[-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1],
-                    ticktext=['1.0', '0.75', '0.5', '0.25', '0', '0.25', '0.5', '0.75', '1.0'],
-                    zeroline=False, showgrid=True, gridcolor='rgba(200,200,200,0.2)'
-                ),
-                yaxis=dict(range=[0.5, 3.5], showticklabels=False, zeroline=False, showgrid=False),
-                annotations=list(fig_stiff.layout.annotations) + anotaciones_eje,
-                height=650, margin=dict(l=20, r=20, t=40, b=40),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
-            )
-            st.plotly_chart(fig_stiff, use_container_width=True)
-
-# --- PESTAÑA 3: ÍNDICE DE FISURACIÓN ---
+# --- PESTAÑA 2: ÍNDICE DE FISURACIÓN (Originalmente Pestaña 3) ---
 with tab_fisuracion:
-    st.header("3. Espacio de Diseño: Tolerancia a la Fisuración y Durabilidad")
+    st.header("2. Espacio de Diseño: Tolerancia a la Fisuración y Durabilidad")
     st.markdown("Análisis basado en la aproximación integral empleando la Tensión Equivalente del Centroide Pre-pico.")
     
     def render_indice_fisuracion(col_idx, lbl_idx, id_suffix, sec_num_1, sec_num_2, threshold_x=None):
@@ -849,4 +712,4 @@ with tab_fisuracion:
 
     # --- Renderizado único del bloque de integración ---
     st.markdown("### Análisis mediante Integración Exacta (Centroide Pre-pico)")
-    render_indice_fisuracion('Indice_Fisuracion_Centroide', 'Índice de Fisuración (Tensión Equivalente Centroide)', 'CENT', '3.1', '3.2', threshold_x=None)
+    render_indice_fisuracion('Indice_Fisuracion_Centroide', 'Índice de Fisuración (Tensión Equivalente Centroide)', 'CENT', '2.1', '2.2', threshold_x=None)
