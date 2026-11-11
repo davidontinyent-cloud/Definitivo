@@ -492,9 +492,9 @@ with tab_parametrico:
             color = 'rgba(46, 204, 113, 0.2)' if val < 0.05 else 'rgba(231, 76, 60, 0.1)'
             return f'background-color: {color}'
             
-        st.dataframe(
+       st.dataframe(
             df_res_fact.style
-            .applymap(highlight_p_val, subset=['p-value (Mezcla)', 'p-value (Env.)', 'p-value (Inter.)'])
+            .map(highlight_p_val, subset=['p-value (Mezcla)', 'p-value (Env.)', 'p-value (Inter.)'])
             .format({
                 'F (Mezcla)': '{:.2f}', 'p-value (Mezcla)': '{:.4e}',
                 'F (Env.)': '{:.2f}', 'p-value (Env.)': '{:.4e}',
