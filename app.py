@@ -492,7 +492,7 @@ with tab_parametrico:
             color = 'rgba(46, 204, 113, 0.2)' if val < 0.05 else 'rgba(231, 76, 60, 0.1)'
             return f'background-color: {color}'
             
-       st.dataframe(
+        st.dataframe(
             df_res_fact.style
             .map(highlight_p_val, subset=['p-value (Mezcla)', 'p-value (Env.)', 'p-value (Inter.)'])
             .format({
@@ -504,44 +504,10 @@ with tab_parametrico:
         )
     else:
         st.warning("No se pudo calcular el ANOVA factorial para los datos actuales.")
-
-    st.markdown("---")
-
-    st.subheader("1.6. Matriz de Correlación Global (Variables ANOVA)")
-    st.markdown("Mapa de correlación de Pearson entre todos los parámetros empleados en los análisis de varianza (datos a **50 mm/min**).")
-    
-    anova_vars = ['Carga_pico', 'Gf_prepico', 'Gf_postpico', 'abs_m75', 'l75', 'Tension_Rotura', 'Centroide_Prepico']
-    anova_vars_presentes = [c for c in anova_vars if c in df.columns]
-    
-    if len(anova_vars_presentes) > 1:
-        df_corr_anova = df[df['Velocidad'] == 50][anova_vars_presentes].dropna() if 'Velocidad' in df.columns else df[anova_vars_presentes].dropna()
-        if not df_corr_anova.empty:
-            matriz_corr_anova = df_corr_anova.corr()
-            
-            fig_heatmap_anova = px.imshow(
-                matriz_corr_anova,
-                text_auto='.2f',
-                aspect="auto",
-                color_continuous_scale='RdBu',
-                range_color=[-1, 1],
-                labels=dict(color="Correlación")
-            )
-            
-            fig_heatmap_anova.update_traces(xgap=1, ygap=1)
-            fig_heatmap_anova.update_layout(
-                height=500,
-                xaxis_tickangle=-45,
-                margin=dict(t=30, b=20, l=20, r=20)
-            )
-            st.plotly_chart(fig_heatmap_anova, use_container_width=True)
-        else:
-            st.warning("No hay suficientes datos para calcular la correlación de estas variables.")
-    else:
-        st.warning("Faltan variables del ANOVA en el dataset.")
         
     st.markdown("---")
     
-    st.subheader("1.7. Análisis del Cociente de Forma Pre-pico (Centroide / Carga Pico)")
+    st.subheader("1.6. Análisis del Cociente de Forma Pre-pico (Centroide / Carga Pico)")
     st.info("Si ese cociente es prácticamente constante, significa que la forma normalizada de la curva pre-pico es relativamente estable, y el centroide exacto aporta poca información adicional respecto a una aproximación basada en la carga máxima.\n\nSi hay diferencias entre mezclas y/o envejecimientos, entonces el centroide nos aporta información extra.")
 
     df_forma = df[df['Velocidad'] == 50].dropna(subset=['Cociente_Forma', 'Mezcla', 'Envejecimiento']) if 'Velocidad' in df.columns else df.dropna(subset=['Cociente_Forma', 'Mezcla', 'Envejecimiento'])
@@ -558,8 +524,11 @@ with tab_parametrico:
         
     st.markdown("---")
     
-    st.subheader("1.8. Análisis de Componentes Principales (PCA)")
+    st.subheader("1.7. Análisis de Componentes Principales (PCA)")
     st.markdown("Visualización de las cargas (*loadings*) de los componentes principales basados en las variables del ANOVA a **50 mm/min**.")
+    
+    anova_vars = ['Carga_pico', 'Gf_prepico', 'Gf_postpico', 'abs_m75', 'l75', 'Tension_Rotura', 'Centroide_Prepico']
+    anova_vars_presentes = [c for c in anova_vars if c in df.columns]
     
     if len(anova_vars_presentes) > 1:
         df_pca = df[df['Velocidad'] == 50][anova_vars_presentes].dropna() if 'Velocidad' in df.columns else df[anova_vars_presentes].dropna()
